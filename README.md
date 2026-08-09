@@ -19,7 +19,7 @@ pip install -r requirements.txt
 
 ### 3. Download Model
 Download dalle_finetuned_model.pth from Google Drive:
-[PASTE DRIVE LINK HERE]
+
 Place in project root folder.
 
 ### 4. Create media folder
