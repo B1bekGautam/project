@@ -1,0 +1,11 @@
+torch
+torchvision
+timm
+django
+pillow
+numpy
+opencv-python
+grad-cam
+matplotlib
+scikit-learn
+facenet-pytorch

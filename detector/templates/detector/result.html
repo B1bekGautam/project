@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detection Result</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0f0f1a;
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        h1 { font-size: 2rem; color: #00d4ff; margin-bottom: 10px; }
+        .verdict {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 15px;
+        }
+        .verdict.fake {
+            color: #ff4444;
+            background: rgba(255, 68, 68, 0.1);
+            border: 2px solid #ff4444;
+        }
+        .verdict.real {
+            color: #44ff88;
+            background: rgba(68, 255, 136, 0.1);
+            border: 2px solid #44ff88;
+        }
+        .confidence {
+            font-size: 1.3rem;
+            color: #aaaaaa;
+            margin-bottom: 30px;
+        }
+        .images {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 30px 0;
+        }
+        .image-box {
+            flex: 1;
+            min-width: 250px;
+            max-width: 400px;
+        }
+        .image-box h3 {
+            color: #00d4ff;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+        .image-box img {
+            width: 100%;
+            border-radius: 10px;
+            border: 2px solid #333;
+        }
+        .btn {
+            background: #00d4ff;
+            color: #0f0f1a;
+            border: none;
+            padding: 12px 35px;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 20px;
+        }
+        .explanation {
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+            border: 1px solid #333;
+        }
+        .explanation h3 { color: #00d4ff; margin-bottom: 10px; }
+        .explanation p { color: #aaaaaa; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Detection Result</h1>
+
+        <div class="verdict {% if is_fake %}fake{% else %}real{% endif %}">
+            {% if is_fake %}
+                ⚠️ FAKE — AI Generated
+            {% else %}
+                ✅ REAL — Authentic
+            {% endif %}
+        </div>
+
+        <div class="confidence">
+            Confidence: {{ confidence }}%
+        </div>
+
+        <div class="images">
+            <div class="image-box">
+                <h3>Original Image</h3>
+                <img src="/media/{{ uploaded_image }}" alt="Uploaded Image">
+            </div>
+            <div class="image-box">
+                <h3>Grad-CAM Explanation</h3>
+                <img src="/media/{{ heatmap }}" alt="Grad-CAM Heatmap">
+            </div>
+        </div>
+
+        <div class="explanation">
+            <h3>What does this mean?</h3>
+            {% if is_fake %}
+            <p>Our AI model detected this image as <strong>AI generated or manipulated</strong>.
+            The Grad-CAM heatmap on the right highlights the facial regions that
+            triggered this detection — typically areas like eyes, skin texture,
+            hair boundaries, or jaw lines where GAN artifacts appear.</p>
+            {% else %}
+            <p>Our AI model classified this image as a <strong>real authentic photograph</strong>.
+            The Grad-CAM heatmap shows the facial regions the model analyzed
+            to make this decision. No significant AI generation artifacts were detected.</p>
+            {% endif %}
+        </div>
+
+        <a href="/" class="btn">Analyze Another Image</a>
+    </div>
+</body>
+</html>

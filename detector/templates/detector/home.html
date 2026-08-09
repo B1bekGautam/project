@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deepfake Detection System</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0f0f1a;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            text-align: center;
+            padding: 40px;
+            max-width: 600px;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            color: #00d4ff;
+        }
+        p {
+            color: #aaaaaa;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        .upload-box {
+            border: 2px dashed #00d4ff;
+            border-radius: 15px;
+            padding: 40px;
+            margin-bottom: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-box:hover { background: #1a1a2e; }
+        .upload-box input { display: none; }
+        .upload-box label {
+            cursor: pointer;
+            font-size: 1rem;
+            color: #00d4ff;
+        }
+        .preview {
+            margin: 20px 0;
+            display: none;
+        }
+        .preview img {
+            max-width: 300px;
+            border-radius: 10px;
+            border: 2px solid #00d4ff;
+        }
+        .btn {
+            background: #00d4ff;
+            color: #0f0f1a;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn:hover { background: #00b8d9; transform: scale(1.05); }
+        #filename { color: #aaaaaa; margin-top: 10px; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Deepfake Detector</h1>
+        <p>Upload an image to detect if it is real or AI generated</p>
+
+        <form method="POST" action="/detect/" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="upload-box" onclick="document.getElementById('imageInput').click()">
+                <label>
+                    �� Click to upload an image
+                </label>
+                <input type="file" id="imageInput" name="image"
+                       accept="image/*" onchange="previewImage(this)">
+                <p id="filename">No file selected</p>
+            </div>
+
+            <div class="preview" id="preview">
+                <img id="previewImg" src="" alt="Preview">
+            </div>
+
+            <button type="submit" class="btn">Analyze Image</button>
+        </form>
+    </div>
+
+    <script>
+        function previewImage(input) {
+            if (input.files && input.files[0]) {
+                document.getElementById('filename').textContent = input.files[0].name;
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('previewImg').src = e.target.result;
+                    document.getElementById('preview').style.display = 'block';
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+    </script>
+</body>
+</html>

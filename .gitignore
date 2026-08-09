@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+*.log
+db.sqlite3
+media/
+dataset/
+*.pth
+*.pt
+training_history.json
+confusion_matrix.png
+.DS_Store
