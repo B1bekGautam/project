@@ -34,7 +34,3 @@ python manage.py runserver
 
 Open http://127.0.0.1:8000
 
-## Team
-- Bibek Gautam (PUL080BCT020)
-- Avinash Yadav (PUL080BCT018)  
-- Homraj KC (PUL080BCT032)
