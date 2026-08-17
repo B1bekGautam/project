@@ -6,6 +6,7 @@
     <title>Deepfake Detection System</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
             font-family: 'Segoe UI', sans-serif;
             background: #0f0f1a;
@@ -15,45 +16,100 @@
             align-items: center;
             justify-content: center;
         }
+
         .container {
             text-align: center;
             padding: 40px;
-            max-width: 600px;
+            max-width: 620px;
+            width: 100%;
         }
+
         h1 {
             font-size: 2.5rem;
             margin-bottom: 10px;
             color: #00d4ff;
         }
-        p {
+
+        .subtitle {
             color: #aaaaaa;
-            margin-bottom: 40px;
+            margin-bottom: 36px;
             font-size: 1.1rem;
         }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 28px;
+            background: #1a1a2e;
+            border-radius: 50px;
+            padding: 5px;
+            gap: 4px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px 0;
+            border: none;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: transparent;
+            color: #aaaaaa;
+        }
+
+        .tab-btn.active {
+            background: #00d4ff;
+            color: #0f0f1a;
+        }
+
+        /* Upload box */
         .upload-box {
             border: 2px dashed #00d4ff;
             border-radius: 15px;
             padding: 40px;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
             cursor: pointer;
             transition: all 0.3s;
         }
+
         .upload-box:hover { background: #1a1a2e; }
+
         .upload-box input { display: none; }
+
         .upload-box label {
             cursor: pointer;
             font-size: 1rem;
             color: #00d4ff;
+            display: block;
+            margin-bottom: 8px;
         }
-        .preview {
-            margin: 20px 0;
-            display: none;
+
+        .upload-icon {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            display: block;
         }
-        .preview img {
-            max-width: 300px;
+
+        #filename-image,
+        #filename-video {
+            color: #aaaaaa;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+
+        /* Preview */
+        .preview { margin: 16px 0; display: none; }
+
+        .preview img, .preview video {
+            max-width: 100%;
             border-radius: 10px;
             border: 2px solid #00d4ff;
         }
+
+        /* Submit button */
         .btn {
             background: #00d4ff;
             color: #0f0f1a;
@@ -64,45 +120,109 @@
             font-weight: bold;
             cursor: pointer;
             transition: all 0.3s;
+            width: 100%;
         }
-        .btn:hover { background: #00b8d9; transform: scale(1.05); }
-        #filename { color: #aaaaaa; margin-top: 10px; font-size: 0.9rem; }
+
+        .btn:hover { background: #00b8d9; transform: scale(1.02); }
+
+        /* Error message */
+        .error-msg {
+            background: #3b0a0a;
+            border: 1px solid #f87171;
+            color: #f87171;
+            border-radius: 10px;
+            padding: 12px 20px;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+        }
+
+        /* Panel visibility */
+        .panel { display: none; }
+        .panel.active { display: block; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🔍 Deepfake Detector</h1>
-        <p>Upload an image to detect if it is real or AI generated</p>
+        <p class="subtitle">Detect whether an image or video contains real or AI-generated faces</p>
 
-        <form method="POST" action="/detect/" enctype="multipart/form-data">
-            {% csrf_token %}
-            <div class="upload-box" onclick="document.getElementById('imageInput').click()">
-                <label>
-                    �� Click to upload an image
-                </label>
-                <input type="file" id="imageInput" name="image"
-                       accept="image/*" onchange="previewImage(this)">
-                <p id="filename">No file selected</p>
-            </div>
+        {% if error %}
+        <div class="error-msg">⚠ {{ error }}</div>
+        {% endif %}
 
-            <div class="preview" id="preview">
-                <img id="previewImg" src="" alt="Preview">
-            </div>
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('image')">🖼 Image</button>
+            <button class="tab-btn" onclick="switchTab('video')">🎬 Video</button>
+        </div>
 
-            <button type="submit" class="btn">Analyze Image</button>
-        </form>
+        <!-- Image Panel -->
+        <div class="panel active" id="panel-image">
+            <form method="POST" action="/detect/" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="upload-box" onclick="document.getElementById('imageInput').click()">
+                    <span class="upload-icon">🖼</span>
+                    <label>Click to upload an image</label>
+                    <small style="color:#666;">JPG, PNG, WEBP supported</small>
+                    <input type="file" id="imageInput" name="image"
+                           accept="image/*" onchange="previewFile(this, 'preview-image', 'img', 'filename-image')">
+                    <p id="filename-image">No file selected</p>
+                </div>
+
+                <div class="preview" id="preview-image">
+                    <img id="preview-image-el" src="" alt="Preview">
+                </div>
+
+                <button type="submit" class="btn">Analyze Image</button>
+            </form>
+        </div>
+
+        <!-- Video Panel -->
+        <div class="panel" id="panel-video">
+            <form method="POST" action="/detect-video/" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="upload-box" onclick="document.getElementById('videoInput').click()">
+                    <span class="upload-icon">🎬</span>
+                    <label>Click to upload a video</label>
+                    <small style="color:#666;">MP4, AVI, MOV supported · Frames sampled at 2 fps</small>
+                    <input type="file" id="videoInput" name="video"
+                           accept="video/*" onchange="previewFile(this, 'preview-video', 'video', 'filename-video')">
+                    <p id="filename-video">No file selected</p>
+                </div>
+
+                <div class="preview" id="preview-video">
+                    <video id="preview-video-el" controls></video>
+                </div>
+
+                <button type="submit" class="btn">Analyze Video</button>
+            </form>
+        </div>
     </div>
 
     <script>
-        function previewImage(input) {
-            if (input.files && input.files[0]) {
-                document.getElementById('filename').textContent = input.files[0].name;
-                var reader = new FileReader();
-                reader.onload = function(e) {
-                    document.getElementById('previewImg').src = e.target.result;
-                    document.getElementById('preview').style.display = 'block';
-                }
-                reader.readAsDataURL(input.files[0]);
+        function switchTab(type) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+
+            document.getElementById('panel-' + type).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function previewFile(input, previewDivId, mediaType, filenameId) {
+            if (!input.files || !input.files[0]) return;
+
+            document.getElementById(filenameId).textContent = input.files[0].name;
+            var previewDiv = document.getElementById(previewDivId);
+            previewDiv.style.display = 'block';
+
+            var url = URL.createObjectURL(input.files[0]);
+
+            if (mediaType === 'img') {
+                document.getElementById('preview-image-el').src = url;
+            } else {
+                var vid = document.getElementById('preview-video-el');
+                vid.src = url;
+                vid.load();
             }
         }
     </script>

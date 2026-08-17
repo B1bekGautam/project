@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Detection Result</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 30px;
+            color: #a78bfa;
+            letter-spacing: 1px;
+        }
+
+        .card {
+            background: #1a1a2e;
+            border-radius: 16px;
+            padding: 30px;
+            width: 100%;
+            max-width: 750px;
+            margin-bottom: 24px;
+            border: 1px solid #2d2d50;
+        }
+
+        .verdict-badge {
+            display: inline-block;
+            font-size: 2rem;
+            font-weight: bold;
+            padding: 10px 36px;
+            border-radius: 50px;
+            margin-bottom: 16px;
+            letter-spacing: 2px;
+        }
+
+        .verdict-fake {
+            background: #3b0a0a;
+            color: #f87171;
+            border: 2px solid #f87171;
+        }
+
+        .verdict-real {
+            background: #0a3b1a;
+            color: #4ade80;
+            border: 2px solid #4ade80;
+        }
+
+        .confidence {
+            font-size: 1.1rem;
+            color: #a0aec0;
+            margin-bottom: 20px;
+        }
+
+        .confidence span {
+            color: #e0e0e0;
+            font-weight: 600;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-top: 10px;
+        }
+
+        .stat-box {
+            background: #12122a;
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+            border: 1px solid #2d2d50;
+        }
+
+        .stat-box .label {
+            font-size: 0.75rem;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+
+        .stat-box .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #c4b5fd;
+        }
+
+        .bar-section {
+            margin-top: 20px;
+        }
+
+        .bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+            color: #a0aec0;
+        }
+
+        .bar-track {
+            background: #12122a;
+            border-radius: 8px;
+            height: 12px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+
+        .bar-fill-fake {
+            background: #f87171;
+            height: 100%;
+            border-radius: 8px;
+            transition: width 0.6s ease;
+        }
+
+        .bar-fill-real {
+            background: #4ade80;
+            height: 100%;
+            border-radius: 8px;
+            transition: width 0.6s ease;
+        }
+
+        .images-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        .img-block {
+            text-align: center;
+        }
+
+        .img-block p {
+            font-size: 0.8rem;
+            color: #718096;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .img-block img {
+            width: 100%;
+            border-radius: 10px;
+            border: 1px solid #2d2d50;
+        }
+
+        .btn {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 12px 32px;
+            background: #7c3aed;
+            color: white;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: background 0.2s;
+        }
+
+        .btn:hover { background: #6d28d9; }
+
+        .section-title {
+            font-size: 0.9rem;
+            color: #a78bfa;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🎬 Video Detection Result</h1>
+
+    <!-- Verdict Card -->
+    <div class="card" style="text-align: center;">
+        <div class="verdict-badge {% if is_fake %}verdict-fake{% else %}verdict-real{% endif %}">
+            {% if is_fake %}⚠ FAKE{% else %}✔ REAL{% endif %}
+        </div>
+        <div class="confidence">
+            Overall Confidence: <span>{{ confidence }}%</span>
+        </div>
+
+        <!-- Frame breakdown bars -->
+        <div class="bar-section">
+            <div class="bar-label">
+                <span>Fake Score</span>
+                <span>{{ fake_score }}%</span>
+            </div>
+            <div class="bar-track">
+                <div class="bar-fill-fake" style="width: {{ fake_score }}%;"></div>
+            </div>
+
+            <div class="bar-label">
+                <span>Real Score</span>
+                <span>{{ real_score }}%</span>
+            </div>
+            <div class="bar-track">
+                <div class="bar-fill-real" style="width: {{ real_score }}%;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Frame Stats Card -->
+    <div class="card">
+        <div class="section-title">Frame Analysis</div>
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="label">Total Frames</div>
+                <div class="value">{{ total_frames }}</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Fake Frames</div>
+                <div class="value" style="color: #f87171;">{{ fake_frames }}</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Real Frames</div>
+                <div class="value" style="color: #4ade80;">{{ real_frames }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grad-CAM Card -->
+    <div class="card">
+        <div class="section-title">Grad-CAM Heatmap (Most Confident Frame)</div>
+        <div class="images-row">
+            {% if uploaded_video %}
+            <div class="img-block">
+                <p>Uploaded Video</p>
+                <video width="100%" controls style="border-radius:10px; border:1px solid #2d2d50;">
+                    <source src="/media/{{ uploaded_video }}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            {% endif %}
+            <div class="img-block">
+                <p>Grad-CAM Heatmap</p>
+                <img src="/media/{{ heatmap }}" alt="Grad-CAM heatmap">
+            </div>
+        </div>
+    </div>
+
+    <a href="/" class="btn">← Analyze Another File</a>
+
+</body>
+</html>
