@@ -6,12 +6,11 @@ from PIL import Image
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from facenet_pytorch import MTCNN
 import os
-import cv2
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from facenet_pytorch import MTCNN
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -21,15 +20,23 @@ MODEL_PATH = os.path.join(BASE_DIR, 'dalle_finetuned_model.pth')
 print(f"Loading model from: {MODEL_PATH}")
 print(f"Model file exists: {os.path.exists(MODEL_PATH)}")
 
+# Load EfficientNet model
 model = timm.create_model('efficientnet_b0', pretrained=False, num_classes=2)
 model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
 model = model.to(DEVICE)
 model.eval()
 print(f"Model loaded on: {DEVICE}")
 
-# MTCNN for face detection (used in video pipeline)
-mtcnn = MTCNN(keep_all=False, device=DEVICE)
+# Load MTCNN for face detection
+mtcnn = MTCNN(
+    image_size=224,
+    margin=20,
+    keep_all=False,
+    device=DEVICE
+)
+print("MTCNN loaded")
 
+# Transform for model input
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -39,182 +46,192 @@ transform = transforms.Compose([
 
 CLASS_NAMES = ['Fake', 'Real']
 
+def predict_image(image_path):
+    print(f"Processing: {image_path}")
 
-def predict_tensor(input_tensor, img_array, output_filename):
-    """
-    Shared core prediction function used by both image and video pipelines.
-    input_tensor: preprocessed torch tensor (1, 3, 224, 224) on DEVICE
-    img_array:    numpy float32 array (224, 224, 3) in [0, 1] for Grad-CAM overlay
-    output_filename: full path where the Grad-CAM heatmap will be saved
-    Returns: (verdict, confidence, is_fake)
-    """
+    # Load original image
+    img = Image.open(image_path).convert('RGB')
+
+    # Step 1 — MTCNN face detection
+    face_tensor = mtcnn(img)
+
+    if face_tensor is None:
+        print("No face detected by MTCNN")
+        return {
+            'verdict': 'No Face Detected',
+            'confidence': 0,
+            'heatmap': None,
+            'is_fake': False,
+            'no_face': True
+        }
+
+    print("Face detected by MTCNN")
+
+    # Convert MTCNN output back to PIL for Grad-CAM visualization
+    # MTCNN returns tensor in range [-1, 1] — convert to [0, 1] for display
+    face_display = face_tensor.permute(1, 2, 0).numpy()
+    face_display = (face_display - face_display.min()) / (face_display.max() - face_display.min())
+    face_display = np.clip(face_display, 0, 1)
+
+    # Step 2 — Prepare input tensor for EfficientNet
+    # MTCNN already resized to 224x224 and normalized to [-1,1]
+    # We need to renormalize to ImageNet normalization
+    face_pil = Image.fromarray((face_display * 255).astype(np.uint8))
+    input_tensor = transform(face_pil).unsqueeze(0).to(DEVICE)
+
+    # Step 3 — Prediction
     with torch.no_grad():
         output = model(input_tensor)
         probs = torch.softmax(output, dim=1)
         pred_class = output.argmax(1).item()
         confidence = probs[0][pred_class].item() * 100
 
-    verdict = CLASS_NAMES[pred_class]
-    is_fake = pred_class == 0
+    print(f"Predicted: {CLASS_NAMES[pred_class]} ({confidence:.2f}%)")
 
-    # Grad-CAM
+    verdict = CLASS_NAMES[pred_class]
+
+    # Step 4 — Grad-CAM on face crop
     target_layers = [model.conv_head]
     cam = GradCAM(model=model, target_layers=target_layers)
     targets = [ClassifierOutputTarget(pred_class)]
     grayscale_cam = cam(input_tensor=input_tensor, targets=targets)[0]
     heatmap = show_cam_on_image(
-        img_array.astype(np.float32),
+        face_display.astype(np.float32),
         grayscale_cam,
         use_rgb=True
     )
-    plt.imsave(output_filename, heatmap)
 
-    return verdict, round(confidence, 2), is_fake
-
-
-def predict_image(image_path):
-    img = Image.open(image_path).convert('RGB')
-    img_resized = img.resize((224, 224))
-    img_array = np.array(img_resized) / 255.0
-
-    input_tensor = transform(img).unsqueeze(0).to(DEVICE)
-
+    # Save heatmap
     heatmap_filename = 'gradcam_' + os.path.basename(image_path)
     heatmap_path = os.path.join(BASE_DIR, 'media', 'uploads', heatmap_filename)
+    plt.imsave(heatmap_path, heatmap)
 
-    verdict, confidence, is_fake = predict_tensor(input_tensor, img_array, heatmap_path)
-
-    print(f"Image verdict: {verdict} | Confidence: {confidence:.2f}%")
+    # Save face crop for display
+    face_filename = 'face_' + os.path.basename(image_path)
+    face_path = os.path.join(BASE_DIR, 'media', 'uploads', face_filename)
+    face_pil.save(face_path)
 
     return {
         'verdict': verdict,
-        'confidence': confidence,
+        'confidence': round(confidence, 2),
         'heatmap': 'uploads/' + heatmap_filename,
-        'is_fake': is_fake
+        'face_crop': 'uploads/' + face_filename,
+        'is_fake': pred_class == 0,
+        'no_face': False
     }
 
 
+
+import cv2
+
 def predict_video(video_path, fps_sample=2):
-    """
-    Video deepfake detection pipeline:
-    1. Extract frames at fps_sample rate
-    2. Detect face in each frame using MTCNN
-    3. Classify each face using the same model
-    4. Aggregate frame-level scores via weighted majority voting
-    5. Generate Grad-CAM on the most confident frame
-    Returns result dict for the view.
-    """
+    print(f"Processing video: {video_path}")
+
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        return {'error': 'Could not open video file.'}
+        return {'error': 'Could not open video file'}
 
-    video_fps = cap.get(cv2.CAP_PROP_FPS)
-    if video_fps <= 0:
-        video_fps = 25  # fallback
-    frame_interval = max(1, int(video_fps / fps_sample))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_interval = max(1, int(fps / fps_sample))
 
-    frame_results = []   # list of (pred_class, confidence, input_tensor, img_array)
-    frame_index = 0
+    frame_scores = []
+    frame_count = 0
+    processed_frames = 0
+    gradcam_saved = False
+    heatmap_filename = None
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
-        if frame_index % frame_interval == 0:
-            # Convert BGR (OpenCV) to RGB
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_frame = Image.fromarray(rgb_frame)
+        if frame_count % frame_interval == 0:
+            # Convert frame to PIL
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(frame_rgb)
 
-            # Face detection
-            boxes, _ = mtcnn.detect(pil_frame)
+            # MTCNN face detection
+            face_tensor = mtcnn(pil_img)
 
-            if boxes is not None and len(boxes) > 0:
-                # Use the first detected face
-                box = boxes[0]
-                x1, y1, x2, y2 = [max(0, int(c)) for c in box]
-                face_crop = pil_frame.crop((x1, y1, x2, y2))
-            else:
-                # No face detected — use full frame resized
-                face_crop = pil_frame
+            if face_tensor is not None:
+                # Convert for display
+                face_display = face_tensor.permute(1, 2, 0).numpy()
+                face_display = (face_display - face_display.min()) / (face_display.max() - face_display.min())
+                face_display = np.clip(face_display, 0, 1)
 
-            face_resized = face_crop.resize((224, 224))
-            img_array = np.array(face_resized) / 255.0
-            input_tensor = transform(face_resized).unsqueeze(0).to(DEVICE)
+                # Prepare input tensor
+                face_pil = Image.fromarray((face_display * 255).astype(np.uint8))
+                input_tensor = transform(face_pil).unsqueeze(0).to(DEVICE)
 
-            with torch.no_grad():
-                output = model(input_tensor)
-                probs = torch.softmax(output, dim=1)
-                pred_class = output.argmax(1).item()
-                confidence = probs[0][pred_class].item() * 100
+                # Prediction
+                with torch.no_grad():
+                    output = model(input_tensor)
+                    probs = torch.softmax(output, dim=1)
+                    pred_class = output.argmax(1).item()
+                    confidence = probs[0][pred_class].item()
 
-            frame_results.append((pred_class, confidence, input_tensor, img_array))
-            print(f"Frame {frame_index}: {CLASS_NAMES[pred_class]} ({confidence:.2f}%)")
+                frame_scores.append({
+                    'pred_class': pred_class,
+                    'confidence': confidence
+                })
 
-        frame_index += 1
+                # Save Grad-CAM for first detected face only
+                if not gradcam_saved:
+                    target_layers = [model.conv_head]
+                    cam = GradCAM(model=model, target_layers=target_layers)
+                    targets = [ClassifierOutputTarget(pred_class)]
+                    grayscale_cam = cam(input_tensor=input_tensor, targets=targets)[0]
+                    heatmap = show_cam_on_image(
+                        face_display.astype(np.float32),
+                        grayscale_cam,
+                        use_rgb=True
+                    )
+                    heatmap_filename = 'gradcam_video_' + os.path.basename(video_path) + '.png'
+                    heatmap_path = os.path.join(BASE_DIR, 'media', 'uploads', heatmap_filename)
+                    plt.imsave(heatmap_path, heatmap)
+                    gradcam_saved = True
+
+                processed_frames += 1
+
+        frame_count += 1
 
     cap.release()
 
-    if not frame_results:
-        return {'error': 'No frames could be processed from the video.'}
+    if not frame_scores:
+        return {'error': 'No faces detected in video'}
 
-    # --- Weighted majority voting ---
-    # Each frame votes with its confidence as weight
-    fake_weight = sum(conf for cls, conf, _, _ in frame_results if cls == 0)
-    real_weight = sum(conf for cls, conf, _, _ in frame_results if cls == 1)
-    total_weight = fake_weight + real_weight
-
-    fake_score = (fake_weight / total_weight) * 100
-    real_score = (real_weight / total_weight) * 100
-
-    if fake_weight >= real_weight:
-        final_verdict = 'Fake'
-        final_confidence = round(fake_score, 2)
-        is_fake = True
-        target_class = 0
-    else:
-        final_verdict = 'Real'
-        final_confidence = round(real_score, 2)
-        is_fake = False
-        target_class = 1
-
-    # --- Grad-CAM on most confident frame matching final verdict ---
-    best_frame = max(
-        [f for f in frame_results if f[0] == target_class],
-        key=lambda f: f[1]
-    )
-    _, _, best_tensor, best_img_array = best_frame
-
-    video_basename = os.path.splitext(os.path.basename(video_path))[0]
-    heatmap_filename = f'gradcam_video_{video_basename}.png'
-    heatmap_path = os.path.join(BASE_DIR, 'media', 'uploads', heatmap_filename)
-
-    target_layers = [model.conv_head]
-    cam = GradCAM(model=model, target_layers=target_layers)
-    targets = [ClassifierOutputTarget(target_class)]
-    grayscale_cam = cam(input_tensor=best_tensor, targets=targets)[0]
-    heatmap = show_cam_on_image(
-        best_img_array.astype(np.float32),
-        grayscale_cam,
-        use_rgb=True
-    )
-    plt.imsave(heatmap_path, heatmap)
-
-    total_frames = len(frame_results)
-    fake_frames = sum(1 for cls, _, _, _ in frame_results if cls == 0)
+    # Temporal aggregation — weighted majority voting
+    fake_score = sum(s['confidence'] for s in frame_scores if s['pred_class'] == 0)
+    real_score = sum(s['confidence'] for s in frame_scores if s['pred_class'] == 1)
+    total_frames = len(frame_scores)
+    fake_frames = sum(1 for s in frame_scores if s['pred_class'] == 0)
     real_frames = total_frames - fake_frames
 
-    print(f"Video verdict: {final_verdict} | Confidence: {final_confidence}% | "
-          f"Frames: {total_frames} (Fake: {fake_frames}, Real: {real_frames})")
+    if fake_score > real_score:
+        verdict = 'Fake'
+        confidence = round((fake_score / (fake_score + real_score)) * 100, 2)
+        is_fake = True
+    else:
+        verdict = 'Real'
+        confidence = round((real_score / (fake_score + real_score)) * 100, 2)
+        is_fake = False
+
+    print(f"Video verdict: {verdict} ({confidence}%)")
+    print(f"Frames analyzed: {total_frames} | Fake: {fake_frames} | Real: {real_frames}")
+
+    total_score = fake_score + real_score
+    fake_pct = round((fake_score / total_score) * 100, 1) if total_score > 0 else 0
+    real_pct = round((real_score / total_score) * 100, 1) if total_score > 0 else 0
 
     return {
-        'verdict': final_verdict,
-        'confidence': final_confidence,
-        'heatmap': 'uploads/' + heatmap_filename,
+        'verdict': verdict,
+        'confidence': confidence,
         'is_fake': is_fake,
         'total_frames': total_frames,
         'fake_frames': fake_frames,
         'real_frames': real_frames,
-        'fake_score': round(fake_score, 2),
-        'real_score': round(real_score, 2),
+        'fake_score': fake_pct,
+        'real_score': real_pct,
+        'heatmap': 'uploads/' + heatmap_filename if heatmap_filename else None,
+        'no_face': False
     }

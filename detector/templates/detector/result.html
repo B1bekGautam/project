@@ -36,6 +36,11 @@
             background: rgba(68, 255, 136, 0.1);
             border: 2px solid #44ff88;
         }
+        .verdict.noface {
+            color: #ffaa00;
+            background: rgba(255, 170, 0, 0.1);
+            border: 2px solid #ffaa00;
+        }
         .confidence {
             font-size: 1.3rem;
             color: #aaaaaa;
@@ -92,42 +97,53 @@
     <div class="container">
         <h1>🔍 Detection Result</h1>
 
-        <div class="verdict {% if is_fake %}fake{% else %}real{% endif %}">
-            {% if is_fake %}
-                ⚠️ FAKE — AI Generated
-            {% else %}
-                ✅ REAL — Authentic
-            {% endif %}
-        </div>
-
-        <div class="confidence">
-            Confidence: {{ confidence }}%
-        </div>
-
-        <div class="images">
-            <div class="image-box">
-                <h3>Original Image</h3>
-                <img src="/media/{{ uploaded_image }}" alt="Uploaded Image">
+        {% if no_face %}
+            <div class="verdict noface">
+                ⚠️ No Face Detected
             </div>
-            <div class="image-box">
-                <h3>Grad-CAM Explanation</h3>
-                <img src="/media/{{ heatmap }}" alt="Grad-CAM Heatmap">
-            </div>
-        </div>
+            <p style="color: #aaaaaa; margin: 20px 0;">
+                No human face was found in the uploaded image.
+                Please upload an image that clearly shows a human face.
+            </p>
 
-        <div class="explanation">
-            <h3>What does this mean?</h3>
-            {% if is_fake %}
-            <p>Our AI model detected this image as <strong>AI generated or manipulated</strong>.
-            The Grad-CAM heatmap on the right highlights the facial regions that
-            triggered this detection — typically areas like eyes, skin texture,
-            hair boundaries, or jaw lines where GAN artifacts appear.</p>
-            {% else %}
-            <p>Our AI model classified this image as a <strong>real authentic photograph</strong>.
-            The Grad-CAM heatmap shows the facial regions the model analyzed
-            to make this decision. No significant AI generation artifacts were detected.</p>
-            {% endif %}
-        </div>
+        {% else %}
+            <div class="verdict {% if is_fake %}fake{% else %}real{% endif %}">
+                {% if is_fake %}
+                    FAKE — AI Generated
+                {% else %}
+                    REAL — Authentic
+                {% endif %}
+            </div>
+
+            <div class="confidence">
+                Confidence: {{ confidence }}%
+            </div>
+
+            <div class="images">
+                <div class="image-box">
+                    <h3>Uploaded Image</h3>
+                    <img src="/media/{{ uploaded_image }}" alt="Uploaded Image">
+                </div>
+                <div class="image-box">
+                    <h3>Grad-CAM Explanation</h3>
+                    <img src="/media/{{ heatmap }}" alt="Grad-CAM Heatmap">
+                </div>
+            </div>
+
+            <!-- <div class="explanation">
+                <h3>What does this mean?</h3>
+                {% if is_fake %}
+                <p>Our AI model detected this image as <strong>AI generated or manipulated</strong>.
+                The Grad-CAM heatmap highlights the facial regions that triggered this detection —
+                typically eyes, skin texture, hair boundaries, or jaw lines where GAN artifacts appear.</p>
+                {% else %}
+                <p>Our AI model classified this image as a <strong>real authentic photograph</strong>.
+                The Grad-CAM heatmap shows the facial regions the model analyzed.
+                No significant AI generation artifacts were detected.</p>
+                {% endif %}
+            </div> -->
+
+        {% endif %}
 
         <a href="/" class="btn">Analyze Another Image</a>
     </div>
